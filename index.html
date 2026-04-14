@@ -291,11 +291,10 @@ textarea { resize: vertical; min-height: 75px; line-height: 1.6; }
 
 <script>
 const SUPABASE_URL = 'https://hapcuitavbjulessbydl.supabase.co';
-const SUPABASE_ANON = 'eyJhbGci0iJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhcGN1aXRhdmJqdWxlc3NieWRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ1NTIwMjcsImV4cCI6MjA2MDEyODAyN30.placeholder';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhcGN1aXRhdmJqdWxlc3NieWRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMzE1MzgsImV4cCI6MjA5MTYwNzUzOH0.E0v92Qr_FHthZB7y2LjZZBa0_DDlmtqQDPIHOeGQL30';
 let ANTHROPIC_KEY = '';
 const PROXY_URL = 'https://proxy-anthropic.toto-depann.workers.dev';
 
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 let fiches = [];
 let cfg = JSON.parse(localStorage.getItem('td_cfg') || '{}');
 let editId = null;
@@ -303,7 +302,6 @@ let editId = null;
 document.getElementById('c_date').value = new Date().toISOString().split('T')[0];
 loadCfg();
 loadFiches();
-setupRealtime();
 
 function switchTab(t) {
   ['saisie','fiches','export','config'].forEach((n,i) => {
@@ -314,65 +312,35 @@ function switchTab(t) {
   if(t==='export') renderExpSel();
 }
 
-async function loadFiches() {
-  setSyncDot('syncing');
-  try {
-    const { data, error } = await sb.from('fiches').select('*').order('created_at', { ascending: false });
-    if(error) throw error;
-    fiches = (data || []).map(r => ({ ...r.data, _id: r.id, _created: r.created_at }));
-    setSyncDot('ok');
-    renderFiches();
-    renderExpSel();
-  } catch(e) {
-    setSyncDot('');
-    fiches = JSON.parse(localStorage.getItem('td_fiches_local') || '[]');
-    renderFiches();
-    showToast('⚠️ Mode hors ligne', true);
-  }
+function loadFiches() {
+  fiches = JSON.parse(localStorage.getItem('td_fiches') || '[]');
+  setSyncDot('ok');
+  renderFiches();
+  renderExpSel();
 }
 
 async function saveFicheDB(fiche) {
-  setSyncDot('syncing');
-  try {
-    if(editId) {
-      const { error } = await sb.from('fiches').update({ data: fiche }).eq('id', editId);
-      if(error) throw error;
-    } else {
-      const { error } = await sb.from('fiches').insert({ data: fiche });
-      if(error) throw error;
-    }
-    setSyncDot('ok');
-    editId = null;
-    await loadFiches();
-    return true;
-  } catch(e) {
-    setSyncDot('');
-    if(editId) { const idx = fiches.findIndex(f => f._id === editId); if(idx >= 0) fiches[idx] = { ...fiche, _id: editId }; }
-    else { fiches.unshift({ ...fiche, _id: Date.now() }); }
-    localStorage.setItem('td_fiches_local', JSON.stringify(fiches));
-    editId = null;
-    showToast('⚠️ Sauvegardé en local', true);
-    return false;
+  if(editId) {
+    const idx = fiches.findIndex(f => f._id === editId);
+    if(idx >= 0) fiches[idx] = { ...fiche, _id: editId };
+  } else {
+    fiches.unshift({ ...fiche, _id: Date.now() });
   }
+  localStorage.setItem('td_fiches', JSON.stringify(fiches));
+  editId = null;
+  loadFiches();
+  return true;
 }
 
 async function deleteFicheDB(id) {
   if(!confirm('Supprimer cette fiche ?')) return;
-  setSyncDot('syncing');
-  try {
-    const { error } = await sb.from('fiches').delete().eq('id', id);
-    if(error) throw error;
-    setSyncDot('ok');
-    await loadFiches();
-    showToast('🗑️ Fiche supprimée');
-  } catch(e) { setSyncDot(''); showToast('❌ Erreur suppression', true); }
+  fiches = fiches.filter(f => f._id !== id);
+  localStorage.setItem('td_fiches', JSON.stringify(fiches));
+  loadFiches();
+  showToast('🗑️ Fiche supprimée');
 }
 
-function setupRealtime() {
-  sb.channel('fiches-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'fiches' }, () => loadFiches())
-    .subscribe();
-}
+function setupRealtime() {}
 
 function setSyncDot(state) {
   const d = document.getElementById('sync-dot');
