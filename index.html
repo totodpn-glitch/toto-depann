@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Toto Depann</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg: #f4f6fa; --surface: #ffffff; --surface2: #eef1f7;
+  --border: #dde2ee; --accent: #2563eb; --accent2: #1d4ed8;
+  --text: #1a2035; --muted: #7a85a0; --success: #16a34a;
+  --blue: #2563eb; --wa: #16a34a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Mono', monospace; background: var(--bg); color: var(--text); min-height: 100vh; padding: 0 0 90px; max-width: 480px; margin: 0 auto; }
+
+header { background: #fff; border-bottom: 1px solid var(--border); padding: 14px 16px; display: flex; align-items: center; gap: 13px; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 8px rgba(37,99,235,.07); }
+.logo { width: 46px; height: 46px; background: linear-gradient(135deg,#2563eb,#1d4ed8); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-family: 'Syne',sans-serif; font-weight: 800; font-size: 12px; color: #fff; line-height: 1.1; text-align: center; flex-shrink: 0; }
+.app-name { font-family: 'Syne',sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); }
+.app-name span { color: var(--accent); }
+.app-sub { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 1px; }
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-left: auto; flex-shrink: 0; transition: background .3s; }
+.sync-dot.ok { background: var(--success); box-shadow: 0 0 6px rgba(22,163,74,.4); }
+.sync-dot.syncing { background: var(--accent); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+.tabs { display: flex; gap: 3px; background: #fff; border-radius: 12px; padding: 4px; margin: 14px 14px 0; border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.tab { flex: 1; padding: 9px 3px; border-radius: 9px; border: none; background: transparent; color: var(--muted); font-family: 'DM Mono',monospace; font-size: 10px; cursor: pointer; transition: all .2s; text-align: center; }
+.tab.active { background: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 2px 8px rgba(37,99,235,.25); }
+
+.panel { display: none; padding: 16px 14px 0; }
+.panel.active { display: block; }
+
+.sec { font-family: 'Syne',sans-serif; font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; margin: 20px 0 11px; display: flex; align-items: center; gap: 8px; }
+.sec::after { content:''; flex:1; height:1px; background:var(--border); }
+
+.field { margin-bottom: 12px; }
+.lbl { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 5px; }
+input, textarea, select { width: 100%; background: #fff; border: 1.5px solid var(--border); border-radius: 9px; padding: 10px 12px; color: var(--text); font-family: 'DM Mono',monospace; font-size: 13px; outline: none; transition: border-color .2s, box-shadow .2s; -webkit-appearance: none; appearance: none; }
+input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+textarea { resize: vertical; min-height: 75px; line-height: 1.6; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.select-wrap { position: relative; }
+.select-wrap::after { content:'▾'; position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; font-size:12px; }
+.select-wrap select { padding-right: 30px; }
+.motif-other { display: none; margin-top: 8px; }
+.motif-other.show { display: block; }
+
+.scan-card { background: linear-gradient(135deg,#eff6ff,#dbeafe); border: 1.5px solid #bfdbfe; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+.scan-title { font-family:'Syne',sans-serif; font-size:14px; font-weight:700; color:#1e40af; margin-bottom:2px; }
+.scan-sub { font-size:11px; color:#6b91c9; margin-bottom:13px; }
+.scan-btn { width:100%; padding:12px; background:linear-gradient(135deg,#2563eb,#1d4ed8); border:none; border-radius:10px; color:#fff; font-family:'Syne',sans-serif; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:opacity .2s; box-shadow:0 3px 10px rgba(37,99,235,.3); }
+.scan-btn:disabled { opacity:.45; cursor:not-allowed; }
+#scan-input { display:none; }
+.scan-preview { display:none; margin-top:11px; border-radius:9px; overflow:hidden; border:1.5px solid #bfdbfe; position:relative; }
+.scan-preview img { width:100%; display:block; max-height:140px; object-fit:cover; }
+.scan-overlay { position:absolute; inset:0; background:rgba(255,255,255,.85); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; }
+.spin { width:28px; height:28px; border:3px solid #bfdbfe; border-top-color:#2563eb; border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.scan-txt { font-size:11px; color:#2563eb; }
+.extracted { border-color:var(--success) !important; background: #f0fdf4 !important; }
+.cg-box { background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:11px; padding:13px; margin-bottom:14px; display:none; }
+.cg-box.on { display:block; }
+.cg-head { display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+.cg-badge { background:var(--success); color:#fff; font-size:9px; padding:2px 7px; border-radius:20px; }
+.cg-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.cg-item .lbl { font-size:9px; margin-bottom:1px; color:#4a7c5a; }
+.cg-item span { font-size:12px; color:#166534; font-weight:500; }
+.api-hint { font-size:11px; color:var(--muted); text-align:center; margin-top:9px; padding:8px; background:var(--surface2); border-radius:8px; }
+
+.prix-ht-box { background:#fff; border:1.5px solid var(--border); border-radius:11px; padding:14px; margin-top:4px; }
+.prix-ht-row { display:flex; align-items:center; gap:10px; }
+.prix-ht-row input { font-size:22px; font-weight:600; text-align:right; border:none; background:transparent; padding:4px 0; color:var(--accent); box-shadow:none !important; }
+.prix-ht-unit { font-size:14px; color:var(--muted); white-space:nowrap; }
+.prix-ttc { font-size:11px; color:var(--muted); margin-top:6px; display:flex; justify-content:space-between; align-items:center; }
+.prix-ttc strong { color:var(--text); font-size:13px; }
+
+.btn-primary { width:100%; padding:14px; background:linear-gradient(135deg,#2563eb,#1d4ed8); border:none; border-radius:11px; color:#fff; font-family:'Syne',sans-serif; font-size:14px; font-weight:700; cursor:pointer; margin-top:14px; transition:opacity .2s; box-shadow:0 4px 14px rgba(37,99,235,.3); }
+.btn-primary:hover { opacity:.88; }
+.btn-secondary { width:100%; padding:11px; background:#fff; border:1.5px solid var(--border); border-radius:11px; color:var(--muted); font-family:'DM Mono',monospace; font-size:12px; cursor:pointer; margin-top:9px; transition:all .2s; }
+.btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+
+.fiche-card { background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:13px; margin-bottom:10px; transition:all .2s; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.fiche-card:hover { border-color:var(--accent); box-shadow:0 3px 12px rgba(37,99,235,.12); }
+.fiche-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px; cursor:pointer; }
+.fiche-client { font-family:'Syne',sans-serif; font-size:14px; font-weight:700; }
+.fiche-plate { font-size:11px; background:#eff6ff; border:1.5px solid #bfdbfe; color:#1e40af; padding:2px 8px; border-radius:5px; letter-spacing:1px; font-weight:600; }
+.fiche-motif { font-size:11px; color:var(--muted); margin-bottom:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.fiche-meta { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); cursor:pointer; }
+.fiche-total { color:var(--accent); font-weight:600; }
+.fiche-actions { display:flex; gap:7px; margin-top:10px; }
+.fa-btn { flex:1; padding:9px 6px; border-radius:9px; border:1.5px solid var(--border); background:var(--surface2); color:var(--muted); font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:5px; }
+.fa-btn.wa { border-color:#bbf7d0; color:var(--wa); background:#f0fdf4; }
+.fa-btn.wa:hover { background:#dcfce7; }
+.fa-btn.mail { border-color:#bfdbfe; color:var(--blue); background:#eff6ff; }
+.fa-btn.mail:hover { background:#dbeafe; }
+.fa-btn.dl { border-color:#e9d5ff; color:#7c3aed; background:#faf5ff; }
+.fa-btn.dl:hover { background:#ede9fe; }
+.fa-btn.del { border-color:#fecaca; color:#dc2626; background:#fef2f2; }
+.fa-btn.del:hover { background:#fee2e2; }
+
+.exp-box { background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:15px; font-size:11px; line-height:1.9; white-space:pre-wrap; color:var(--text); min-height:160px; margin-bottom:12px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.share-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px; }
+.share-btn { padding:12px 6px; border-radius:10px; border:1.5px solid var(--border); background:#fff; color:var(--muted); font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; transition:all .2s; text-align:center; line-height:1.4; }
+.share-btn .si { display:block; font-size:20px; margin-bottom:4px; }
+.share-btn.wa-btn { border-color:#bbf7d0; color:var(--wa); background:#f0fdf4; }
+.share-btn.wa-btn:hover { background:#dcfce7; }
+.share-btn.mail-btn { border-color:#bfdbfe; color:var(--blue); background:#eff6ff; }
+.share-btn.mail-btn:hover { background:#dbeafe; }
+.share-btn.dl-btn { border-color:#e9d5ff; color:#7c3aed; background:#faf5ff; }
+.share-btn.dl-btn:hover { background:#ede9fe; }
+.copy-ok { display:none; background:var(--success); color:#fff; text-align:center; padding:8px; border-radius:8px; font-size:12px; margin-top:8px; }
+
+.empty { text-align:center; padding:40px 16px; color:var(--muted); font-size:13px; }
+.empty-icon { font-size:36px; margin-bottom:8px; }
+.toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(80px); background:#1a2035; color:#fff; padding:9px 18px; border-radius:30px; font-size:12px; transition:transform .3s; z-index:200; white-space:nowrap; box-shadow:0 4px 16px rgba(0,0,0,.15); }
+.toast.show { transform:translateX(-50%) translateY(0); }
+.toast.err { background:#dc2626; }
+
+.cfg-box { background:#fff; border:1.5px solid var(--border); border-radius:10px; padding:12px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">TOTO<br>D+</div>
+  <div>
+    <div class="app-name">Toto <span>Depann</span></div>
+    <div class="app-sub">Dépannage · Facturation</div>
+  </div>
+  <div class="sync-dot" id="sync-dot" title="Synchronisation"></div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('saisie')">✏️ Saisie</button>
+  <button class="tab" onclick="switchTab('fiches')">📋 Fiches</button>
+  <button class="tab" onclick="switchTab('export')">📤 Envoyer</button>
+  <button class="tab" onclick="switchTab('config')">⚙️ Config</button>
+</div>
+
+<!-- SAISIE -->
+<div class="panel active" id="panel-saisie">
+  <div class="scan-card">
+    <div class="scan-title">📷 Scanner la carte grise</div>
+    <div class="scan-sub">Photo → extraction automatique des infos</div>
+    <input type="file" id="scan-input" accept="image/*" capture="environment" onchange="handleScan(this)">
+    <button class="scan-btn" id="scan-btn" onclick="document.getElementById('scan-input').click()">
+      <span>📷</span> Prendre en photo / Galerie
+    </button>
+    <div class="scan-preview" id="scan-preview">
+      <img id="scan-img" src="" alt="">
+      <div class="scan-overlay" id="scan-overlay">
+        <div class="spin"></div>
+        <div class="scan-txt" id="scan-status">Analyse IA…</div>
+      </div>
+    </div>
+    <div class="api-hint" id="api-hint" style="display:none"></div>
+  </div>
+
+  <div class="cg-box" id="cg-box">
+    <div class="cg-head">
+      <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:12px;color:#166534;">Carte grise lue</span>
+      <span class="cg-badge">✓ Extrait auto</span>
+    </div>
+    <div class="cg-grid" id="cg-grid"></div>
+  </div>
+
+  <div class="sec">Propriétaire</div>
+  <div class="row2">
+    <div class="field"><label class="lbl">Nom</label><input type="text" id="c_nom" placeholder="DUPONT"></div>
+    <div class="field"><label class="lbl">Prénom</label><input type="text" id="c_prenom" placeholder="Jean"></div>
+  </div>
+  <div class="row2">
+    <div class="field"><label class="lbl">Téléphone</label><input type="tel" id="c_tel" placeholder="06 00 00 00 00"></div>
+    <div class="field"><label class="lbl">Date</label><input type="date" id="c_date"></div>
+  </div>
+
+  <div class="sec">Adresses</div>
+  <div class="field"><label class="lbl">📍 Adresse d'intervention</label><input type="text" id="adr_inter" placeholder="Lieu de l'intervention"></div>
+  <div class="field"><label class="lbl">🏭 Adresse de dépôt / garage</label><input type="text" id="adr_depot" placeholder="Où le véhicule est déposé"></div>
+
+  <div class="sec">Véhicule</div>
+  <div class="row2">
+    <div class="field"><label class="lbl">Immatriculation</label><input type="text" id="v_immat" placeholder="AB-123-CD" style="text-transform:uppercase;letter-spacing:1px;"></div>
+    <div class="field"><label class="lbl">Marque</label><input type="text" id="v_marque" placeholder="Renault"></div>
+  </div>
+  <div class="row2">
+    <div class="field"><label class="lbl">Modèle</label><input type="text" id="v_modele" placeholder="Clio"></div>
+    <div class="field"><label class="lbl">Année</label><input type="text" id="v_annee" placeholder="2018"></div>
+  </div>
+  <div class="row2">
+    <div class="field"><label class="lbl">Assurance</label><input type="text" id="v_carbu" placeholder="Ex: AXA, MAIF…"></div>
+    <div class="field"><label class="lbl">VIN</label><input type="text" id="v_vin" placeholder="VF1…" style="font-size:11px;"></div>
+  </div>
+
+  <div class="sec">Motif d'intervention</div>
+  <div class="field">
+    <label class="lbl">Motif principal</label>
+    <div class="select-wrap">
+      <select id="motif_select" onchange="onMotifChange()">
+        <option value="">-- Sélectionner --</option>
+        <option>Panne de moteur</option>
+        <option>Crevaison</option>
+        <option>Batterie déchargée</option>
+        <option>Panne d'essence / carburant</option>
+        <option>Surchauffe moteur</option>
+        <option>Problème de démarrage</option>
+        <option>Accident / sinistre</option>
+        <option>Serrurerie / clé bloquée</option>
+        <option>Remorquage</option>
+        <option value="Autre">Autre (préciser)</option>
+      </select>
+    </div>
+    <div class="motif-other" id="motif_other">
+      <input type="text" id="motif_custom" placeholder="Précisez le motif…" style="margin-top:8px;">
+    </div>
+  </div>
+  <div class="field"><label class="lbl">Description détaillée</label><textarea id="description" placeholder="Décrivez le problème constaté…"></textarea></div>
+  <div class="field"><label class="lbl">Travaux réalisés</label><textarea id="travaux" placeholder="Détaillez les actions effectuées…"></textarea></div>
+
+  <div class="sec">Prix de l'intervention</div>
+  <div class="prix-ht-box">
+    <label class="lbl" style="margin-bottom:8px;">Montant HT</label>
+    <div class="prix-ht-row">
+      <input type="number" id="prix_ht" placeholder="0.00" min="0" step="0.01" oninput="calcTTC()">
+      <span class="prix-ht-unit">€ HT</span>
+    </div>
+    <div class="prix-ttc">
+      <span>TVA
+        <select id="tva_sel" onchange="calcTTC()" style="display:inline-block;width:auto;padding:2px 6px;font-size:11px;margin-left:4px;border-radius:5px;">
+          <option value="0">0%</option><option value="10">10%</option><option value="20" selected>20%</option>
+        </select>
+      </span>
+      <span>Total TTC : <strong id="prix_ttc_lbl">0,00 €</strong></span>
+    </div>
+  </div>
+
+  <div class="sec">Commentaire</div>
+  <div class="field"><textarea id="commentaire" placeholder="Observations, recommandations, pièces à commander…" style="min-height:80px;"></textarea></div>
+
+  <button class="btn-primary" onclick="saveFiche()">💾 Enregistrer la fiche</button>
+  <button class="btn-secondary" onclick="resetForm()">↺ Nouvelle fiche</button>
+</div>
+
+<!-- FICHES -->
+<div class="panel" id="panel-fiches">
+  <div id="fiches-list"></div>
+</div>
+
+<!-- EXPORT -->
+<div class="panel" id="panel-export">
+  <div class="field">
+    <label class="lbl">Sélectionner une fiche</label>
+    <div class="select-wrap">
+      <select id="exp_sel" onchange="renderPreview()"><option value="">-- Choisir --</option></select>
+    </div>
+  </div>
+  <div class="exp-box" id="preview-text">Sélectionnez une fiche…</div>
+  <div class="share-grid">
+    <button class="share-btn wa-btn" onclick="sendWhatsApp()"><span class="si">💬</span>WhatsApp</button>
+    <button class="share-btn mail-btn" onclick="sendMail()"><span class="si">📧</span>E-mail</button>
+    <button class="share-btn dl-btn" onclick="downloadFiche()"><span class="si">⬇️</span>Télécharger</button>
+  </div>
+  <button class="btn-secondary" style="margin-top:10px;" onclick="copyText()">📋 Copier le texte</button>
+  <div class="copy-ok" id="copy-ok">✅ Copié !</div>
+</div>
+
+<!-- CONFIG -->
+<div class="panel" id="panel-config">
+  <div class="sec">Mes informations</div>
+  <div class="cfg-box">
+    <div class="field"><label class="lbl">Mon nom / société</label><input type="text" id="cfg_nom" placeholder="Toto Depann SARL" oninput="saveCfg()"></div>
+    <div class="field"><label class="lbl">Mon téléphone</label><input type="tel" id="cfg_tel" placeholder="06 00 00 00 00" oninput="saveCfg()"></div>
+    <div class="field"><label class="lbl">Mon e-mail</label><input type="email" id="cfg_email" placeholder="toto@depann.fr" oninput="saveCfg()"></div>
+    <div class="field"><label class="lbl">Mon adresse</label><input type="text" id="cfg_adresse" placeholder="12 rue…" oninput="saveCfg()"></div>
+    <div class="field"><label class="lbl">SIRET</label><input type="text" id="cfg_siret" placeholder="000 000 000 00000" oninput="saveCfg()"></div>
+  </div>
+  <div class="sec">Clé API Anthropic</div>
+  <div class="field"><label class="lbl">Clé API (commence par sk-ant-...)</label><input type="password" id="cfg_apikey" placeholder="sk-ant-..." oninput="saveCfg()"></div>
+
+  <div class="sec">WhatsApp destinataire</div>
+  <div class="field"><label class="lbl">N° WhatsApp</label><input type="tel" id="cfg_wa" placeholder="+33600000000" oninput="saveCfg()"></div>
+  <div class="sec">Données</div>
+  <button class="btn-secondary" onclick="loadFiches()">🔄 Recharger les fiches</button>
+  <button class="btn-secondary" style="border-color:#fecaca;color:#dc2626;margin-top:8px;" onclick="clearLocal()">🗑️ Vider le cache local</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://hapcuitavbjulessbydl.supabase.co';
+const SUPABASE_ANON = 'eyJhbGci0iJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhcGN1aXRhdmJqdWxlc3NieWRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ1NTIwMjcsImV4cCI6MjA2MDEyODAyN30.placeholder';
+let ANTHROPIC_KEY = '';
+const PROXY_URL = 'https://proxy-anthropic.toto-depann.workers.dev';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+let fiches = [];
+let cfg = JSON.parse(localStorage.getItem('td_cfg') || '{}');
+let editId = null;
+
+document.getElementById('c_date').value = new Date().toISOString().split('T')[0];
+loadCfg();
+loadFiches();
+setupRealtime();
+
+function switchTab(t) {
+  ['saisie','fiches','export','config'].forEach((n,i) => {
+    document.querySelectorAll('.tab')[i].classList.toggle('active', n===t);
+    document.getElementById('panel-'+n).classList.toggle('active', n===t);
+  });
+  if(t==='fiches') renderFiches();
+  if(t==='export') renderExpSel();
+}
+
+async function loadFiches() {
+  setSyncDot('syncing');
+  try {
+    const { data, error } = await sb.from('fiches').select('*').order('created_at', { ascending: false });
+    if(error) throw error;
+    fiches = (data || []).map(r => ({ ...r.data, _id: r.id, _created: r.created_at }));
+    setSyncDot('ok');
+    renderFiches();
+    renderExpSel();
+  } catch(e) {
+    setSyncDot('');
+    fiches = JSON.parse(localStorage.getItem('td_fiches_local') || '[]');
+    renderFiches();
+    showToast('⚠️ Mode hors ligne', true);
+  }
+}
+
+async function saveFicheDB(fiche) {
+  setSyncDot('syncing');
+  try {
+    if(editId) {
+      const { error } = await sb.from('fiches').update({ data: fiche }).eq('id', editId);
+      if(error) throw error;
+    } else {
+      const { error } = await sb.from('fiches').insert({ data: fiche });
+      if(error) throw error;
+    }
+    setSyncDot('ok');
+    editId = null;
+    await loadFiches();
+    return true;
+  } catch(e) {
+    setSyncDot('');
+    if(editId) { const idx = fiches.findIndex(f => f._id === editId); if(idx >= 0) fiches[idx] = { ...fiche, _id: editId }; }
+    else { fiches.unshift({ ...fiche, _id: Date.now() }); }
+    localStorage.setItem('td_fiches_local', JSON.stringify(fiches));
+    editId = null;
+    showToast('⚠️ Sauvegardé en local', true);
+    return false;
+  }
+}
+
+async function deleteFicheDB(id) {
+  if(!confirm('Supprimer cette fiche ?')) return;
+  setSyncDot('syncing');
+  try {
+    const { error } = await sb.from('fiches').delete().eq('id', id);
+    if(error) throw error;
+    setSyncDot('ok');
+    await loadFiches();
+    showToast('🗑️ Fiche supprimée');
+  } catch(e) { setSyncDot(''); showToast('❌ Erreur suppression', true); }
+}
+
+function setupRealtime() {
+  sb.channel('fiches-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'fiches' }, () => loadFiches())
+    .subscribe();
+}
+
+function setSyncDot(state) {
+  const d = document.getElementById('sync-dot');
+  d.className = 'sync-dot' + (state ? ' '+state : '');
+}
+
+function onMotifChange() {
+  document.getElementById('motif_other').classList.toggle('show', document.getElementById('motif_select').value === 'Autre');
+}
+function getMotif() {
+  const v = document.getElementById('motif_select').value;
+  return v === 'Autre' ? (document.getElementById('motif_custom').value || 'Autre') : v;
+}
+
+function calcTTC() {
+  const ht = parseFloat(document.getElementById('prix_ht').value) || 0;
+  const tva = parseInt(document.getElementById('tva_sel').value);
+  document.getElementById('prix_ttc_lbl').textContent = fmt(ht*(1+tva/100));
+  return { ht, tva, ttc: ht*(1+tva/100) };
+}
+function fmt(n) { return n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+
+async function handleScan(input) {
+  if(!input.files[0]) return;
+  const file = input.files[0];
+  document.getElementById('scan-img').src = URL.createObjectURL(file);
+  document.getElementById('scan-preview').style.display = 'block';
+  document.getElementById('scan-overlay').style.display = 'flex';
+  document.getElementById('scan-status').textContent = 'Analyse IA en cours…';
+  document.getElementById('scan-btn').disabled = true;
+  document.getElementById('api-hint').style.display = 'none';
+  try {
+    const b64 = await toB64(file);
+    const cg = await extractCG(b64);
+    document.getElementById('scan-overlay').style.display = 'none';
+    fillCG(cg);
+    showToast('✅ Carte grise lue !');
+  } catch(e) {
+    document.getElementById('scan-overlay').style.display = 'none';
+    document.getElementById('api-hint').textContent = '⚠️ ' + (e.message || 'Lecture impossible');
+    document.getElementById('api-hint').style.display = 'block';
+  } finally { document.getElementById('scan-btn').disabled = false; }
+}
+
+function toB64(file) {
+  return new Promise((res,rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('Lecture impossible'));
+    r.readAsDataURL(file);
+  });
+}
+
+async function extractCG(b64) {
+  const resp = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      apiKey: ANTHROPIC_KEY,
+      model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+      messages: [{ role: 'user', content: [
+        { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:b64 } },
+        { type:'text', text:`Expert OCR cartes grises françaises. Extrait toutes les infos visibles. Réponds UNIQUEMENT avec un JSON valide sans markdown : {"immatriculation":"","nom":"","prenom":"","adresse":"","marque":"","modele":"","annee":"","carburant":"traduit en Diesel/Essence/Electrique/GPL","vin":"","puissance":"","couleur":""}` }
+      ]}]
+    })
+  });
+  if(!resp.ok) throw new Error('Erreur API '+resp.status);
+  const data = await resp.json();
+  return JSON.parse(data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim());
+}
+
+function fillCG(cg) {
+  const set = (id,val) => { if(!val) return; const el=document.getElementById(id); el.value=val; el.classList.add('extracted'); setTimeout(()=>el.classList.remove('extracted'),3500); };
+  set('c_nom',cg.nom); set('c_prenom',cg.prenom); set('adr_inter',cg.adresse);
+  set('v_immat',(cg.immatriculation||'').toUpperCase()); set('v_marque',cg.marque);
+  set('v_modele',cg.modele); set('v_annee',cg.annee); set('v_carbu',cg.carburant); set('v_vin',cg.vin);
+  const fields = [['Immat.',cg.immatriculation],['Marque',cg.marque],['Modèle',cg.modele],
+    ['Année',cg.annee],['Carburant',cg.carburant],['Puissance',cg.puissance?cg.puissance+' CV':''],
+    ['Couleur',cg.couleur],['VIN',cg.vin?cg.vin.substring(0,10)+'…':'']].filter(([,v])=>v);
+  document.getElementById('cg-grid').innerHTML = fields.map(([l,v])=>`<div class="cg-item"><label class="lbl">${l}</label><span>${v}</span></div>`).join('');
+  document.getElementById('cg-box').classList.add('on');
+}
+
+async function saveFiche() {
+  const nom = document.getElementById('c_nom').value.trim();
+  if(!nom) { showToast('⚠️ Nom du client requis', true); return; }
+  const {ht,tva,ttc} = calcTTC();
+  const fiche = {
+    id: editId || Date.now(),
+    c_nom: nom, c_prenom: document.getElementById('c_prenom').value,
+    c_tel: document.getElementById('c_tel').value, date: document.getElementById('c_date').value,
+    adr_inter: document.getElementById('adr_inter').value, adr_depot: document.getElementById('adr_depot').value,
+    v_immat: document.getElementById('v_immat').value.toUpperCase(), v_marque: document.getElementById('v_marque').value,
+    v_modele: document.getElementById('v_modele').value, v_annee: document.getElementById('v_annee').value,
+    v_carbu: document.getElementById('v_carbu').value, v_vin: document.getElementById('v_vin').value,
+    motif: getMotif(), description: document.getElementById('description').value,
+    travaux: document.getElementById('travaux').value, prix_ht: ht, tva, prix_ttc: ttc,
+    commentaire: document.getElementById('commentaire').value,
+  };
+  await saveFicheDB(fiche);
+  showToast('✅ Fiche enregistrée et synchronisée !');
+  resetForm();
+  switchTab('fiches');
+}
+
+function resetForm() {
+  ['c_nom','c_prenom','c_tel','adr_inter','adr_depot','v_immat','v_marque','v_modele','v_annee','v_carbu','v_vin','description','travaux','commentaire','prix_ht','motif_custom']
+    .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('c_date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('motif_select').value = '';
+  document.getElementById('motif_other').classList.remove('show');
+  document.getElementById('tva_sel').value = '20';
+  document.getElementById('prix_ttc_lbl').textContent = '0,00 €';
+  document.getElementById('cg-box').classList.remove('on');
+  document.getElementById('scan-preview').style.display = 'none';
+  document.getElementById('api-hint').style.display = 'none';
+  document.getElementById('scan-input').value = '';
+  editId = null;
+}
+
+function renderFiches() {
+  const el = document.getElementById('fiches-list');
+  if(!fiches.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>Aucune fiche<br><small>Créez votre première fiche dans Saisie</small></div>'; return; }
+  el.innerHTML = fiches.map((f,i) => `
+    <div class="fiche-card">
+      <div onclick="openFiche(${i})">
+        <div class="fiche-top">
+          <div class="fiche-client">${f.c_prenom?f.c_prenom+' ':''}${f.c_nom}</div>
+          ${f.v_immat?`<div class="fiche-plate">${f.v_immat}</div>`:''}
+        </div>
+        <div class="fiche-motif">${f.motif||f.description||'—'}</div>
+        <div class="fiche-meta">
+          <span>${fmtDate(f.date)}${f.v_marque?' · '+f.v_marque+(f.v_modele?' '+f.v_modele:''):''}</span>
+          <span class="fiche-total">${fmt(f.prix_ttc||0)} TTC</span>
+        </div>
+      </div>
+      <div class="fiche-actions">
+        <button class="fa-btn wa" onclick="sendWAIdx(${i})">💬 WA</button>
+        <button class="fa-btn mail" onclick="sendMailIdx(${i})">📧 Mail</button>
+        <button class="fa-btn dl" onclick="dlFicheIdx(${i})">⬇️ DL</button>
+        <button class="fa-btn del" onclick="deleteFicheDB(${f._id})">🗑️</button>
+      </div>
+    </div>`).join('');
+}
+
+function fmtDate(d) { if(!d) return ''; const [y,m,j]=d.split('-'); return `${j}/${m}/${y}`; }
+
+function openFiche(i) {
+  const f = fiches[i]; editId = f._id;
+  const s = (id,v) => { const el=document.getElementById(id); if(el) el.value=v||''; };
+  s('c_nom',f.c_nom); s('c_prenom',f.c_prenom); s('c_tel',f.c_tel); s('c_date',f.date);
+  s('adr_inter',f.adr_inter); s('adr_depot',f.adr_depot);
+  s('v_immat',f.v_immat); s('v_marque',f.v_marque); s('v_modele',f.v_modele);
+  s('v_annee',f.v_annee); s('v_carbu',f.v_carbu); s('v_vin',f.v_vin);
+  s('description',f.description); s('travaux',f.travaux); s('commentaire',f.commentaire);
+  s('prix_ht',f.prix_ht||'');
+  document.getElementById('tva_sel').value = f.tva||20;
+  calcTTC();
+  const sel = document.getElementById('motif_select');
+  const opts = [...sel.options].map(o=>o.value);
+  if(opts.includes(f.motif)) { sel.value=f.motif; }
+  else if(f.motif) { sel.value='Autre'; document.getElementById('motif_custom').value=f.motif; document.getElementById('motif_other').classList.add('show'); }
+  switchTab('saisie');
+}
+
+function genText(f) {
+  const veh = [f.v_marque,f.v_modele,f.v_annee].filter(Boolean).join(' ');
+  return [
+    '╔══════════════════════════════════════╗',
+    '║         TOTO DEPANN                  ║',
+    '║      Fiche d\'intervention            ║',
+    '╚══════════════════════════════════════╝',
+    cfg.nom ? `\n${cfg.nom}` : '',
+    cfg.tel ? `Tél : ${cfg.tel}` : '',
+    cfg.siret ? `SIRET : ${cfg.siret}` : '',
+    '',
+    `DATE         : ${fmtDate(f.date)}`,
+    `CLIENT       : ${f.c_prenom?f.c_prenom+' ':''}${f.c_nom}`,
+    f.c_tel ? `TÉLÉPHONE    : ${f.c_tel}` : '',
+    '',
+    f.adr_inter ? `📍 INTERVENTION  : ${f.adr_inter}` : '',
+    f.adr_depot ? `🏭 DÉPÔT         : ${f.adr_depot}` : '',
+    '',
+    '──── VÉHICULE ────────────────────────',
+    f.v_immat ? `IMMATRIC.    : ${f.v_immat}` : '',
+    veh ? `VÉHICULE     : ${veh}` : '',
+    f.v_carbu ? `ASSURANCE    : ${f.v_carbu}` : '',
+    f.v_vin ? `VIN          : ${f.v_vin}` : '',
+    '',
+    '──── INTERVENTION ────────────────────',
+    f.motif ? `MOTIF        : ${f.motif}` : '',
+    '',
+    f.description ? `PROBLÈME :\n${f.description}` : '',
+    f.travaux ? `\nTRAVAUX RÉALISÉS :\n${f.travaux}` : '',
+    '',
+    '──── FACTURATION ─────────────────────',
+    `Montant HT   : ${fmt(f.prix_ht||0)}`,
+    `TVA (${f.tva||20}%)    : ${fmt((f.prix_ht||0)*(f.tva||20)/100)}`,
+    `TOTAL TTC    : ${fmt(f.prix_ttc||0)}`,
+    f.commentaire ? `\n──── COMMENTAIRE ─────────────────────\n${f.commentaire}` : '',
+    '\n══════════════════════════════════════',
+    'Merci pour votre confiance — Toto Depann',
+  ].filter(l=>l!==null&&l!==undefined&&l!==false).join('\n').replace(/\n{3,}/g,'\n\n');
+}
+
+function renderExpSel() {
+  document.getElementById('exp_sel').innerHTML = '<option value="">-- Choisir --</option>' +
+    fiches.map((f,i)=>`<option value="${i}">${f.c_prenom?f.c_prenom+' ':''}${f.c_nom} — ${fmtDate(f.date)}</option>`).join('');
+}
+function renderPreview() {
+  const i = document.getElementById('exp_sel').value;
+  document.getElementById('preview-text').textContent = i==='' ? 'Sélectionnez une fiche…' : genText(fiches[i]);
+}
+function getFicheSel() { const i=document.getElementById('exp_sel').value; if(i===''){showToast('⚠️ Choisissez une fiche',true);return null;} return fiches[i]; }
+function sendWhatsApp() { const f=getFicheSel(); if(f) doWA(f); }
+function sendWAIdx(i) { doWA(fiches[i]); }
+function doWA(f) {
+  const txt=genText(f), wa=cfg.wa||'', enc=encodeURIComponent(txt);
+  window.open(wa ? `https://wa.me/${wa.replace(/[^0-9+]/g,'')}?text=${enc}` : `https://wa.me/?text=${enc}`, '_blank');
+}
+function sendMail() { const f=getFicheSel(); if(f) doMail(f); }
+function sendMailIdx(i) { doMail(fiches[i]); }
+function doMail(f) {
+  const subj=encodeURIComponent(`Fiche dépannage — ${f.c_prenom?f.c_prenom+' ':''}${f.c_nom} — ${fmtDate(f.date)}`);
+  window.location.href = `mailto:${cfg.email||''}?subject=${subj}&body=${encodeURIComponent(genText(f))}`;
+}
+function downloadFiche() { const f=getFicheSel(); if(f) dlFicheObj(f); }
+function dlFicheIdx(i) { dlFicheObj(fiches[i]); }
+function dlFicheObj(f) {
+  const nom=`${f.c_nom}_${f.v_immat||'depann'}_${f.date||'fiche'}`.replace(/[^a-z0-9_-]/gi,'_');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([genText(f)],{type:'text/plain;charset=utf-8'}));
+  a.download=`TotoDepann_${nom}.txt`; a.click();
+  showToast('⬇️ Téléchargé !');
+}
+function copyText() {
+  const t=document.getElementById('preview-text').textContent;
+  if(t.includes('Sélectionnez')){showToast('⚠️ Choisissez une fiche',true);return;}
+  navigator.clipboard.writeText(t).then(()=>{ const el=document.getElementById('copy-ok'); el.style.display='block'; setTimeout(()=>el.style.display='none',2500); });
+}
+
+function saveCfg() {
+  cfg = { nom:document.getElementById('cfg_nom').value, tel:document.getElementById('cfg_tel').value,
+    email:document.getElementById('cfg_email').value, adresse:document.getElementById('cfg_adresse').value,
+    siret:document.getElementById('cfg_siret').value, wa:document.getElementById('cfg_wa').value,
+    apikey:document.getElementById('cfg_apikey').value };
+  ANTHROPIC_KEY = cfg.apikey || '';
+  localStorage.setItem('td_cfg', JSON.stringify(cfg));
+}
+function loadCfg() {
+  const s=(id,v)=>{ const el=document.getElementById(id); if(el&&v) el.value=v; };
+  s('cfg_nom',cfg.nom); s('cfg_tel',cfg.tel); s('cfg_email',cfg.email);
+  s('cfg_adresse',cfg.adresse); s('cfg_siret',cfg.siret); s('cfg_wa',cfg.wa);
+  s('cfg_apikey',cfg.apikey);
+  ANTHROPIC_KEY = cfg.apikey || '';
+}
+function clearLocal() { localStorage.removeItem('td_fiches_local'); showToast('🗑️ Cache vidé'); }
+
+function showToast(msg, err=false) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show'+(err?' err':'');
+  setTimeout(()=>t.classList.remove('show'),2800);
+}
+</script>
+</body>
+</html>
