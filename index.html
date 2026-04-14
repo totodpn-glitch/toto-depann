@@ -291,10 +291,11 @@ textarea { resize: vertical; min-height: 75px; line-height: 1.6; }
 
 <script>
 const SUPABASE_URL = 'https://hapcuitavbjulessbydl.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhcGN1aXRhdmJqdWxlc3NieWRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMzE1MzgsImV4cCI6MjA5MTYwNzUzOH0.E0v92Qr_FHthZB7y2LjZZBa0_DDlmtqQDPIHOeGQL30';
+const SUPABASE_ANON = 'eyJhbGci0iJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhcGN1aXRhdmJqdWxlc3NieWRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ1NTIwMjcsImV4cCI6MjA2MDEyODAyN30.placeholder';
 let ANTHROPIC_KEY = '';
 const PROXY_URL = 'https://proxy-anthropic.toto-depann.workers.dev';
 
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 let fiches = [];
 let cfg = JSON.parse(localStorage.getItem('td_cfg') || '{}');
 let editId = null;
@@ -302,6 +303,7 @@ let editId = null;
 document.getElementById('c_date').value = new Date().toISOString().split('T')[0];
 loadCfg();
 loadFiches();
+setupRealtime();
 
 function switchTab(t) {
   ['saisie','fiches','export','config'].forEach((n,i) => {
@@ -312,35 +314,65 @@ function switchTab(t) {
   if(t==='export') renderExpSel();
 }
 
-function loadFiches() {
-  fiches = JSON.parse(localStorage.getItem('td_fiches') || '[]');
-  setSyncDot('ok');
-  renderFiches();
-  renderExpSel();
+async function loadFiches() {
+  setSyncDot('syncing');
+  try {
+    const { data, error } = await sb.from('fiches').select('*').order('created_at', { ascending: false });
+    if(error) throw error;
+    fiches = (data || []).map(r => ({ ...r.data, _id: r.id, _created: r.created_at }));
+    setSyncDot('ok');
+    renderFiches();
+    renderExpSel();
+  } catch(e) {
+    setSyncDot('');
+    fiches = JSON.parse(localStorage.getItem('td_fiches_local') || '[]');
+    renderFiches();
+    showToast('⚠️ Mode hors ligne', true);
+  }
 }
 
 async function saveFicheDB(fiche) {
-  if(editId) {
-    const idx = fiches.findIndex(f => f._id === editId);
-    if(idx >= 0) fiches[idx] = { ...fiche, _id: editId };
-  } else {
-    fiches.unshift({ ...fiche, _id: Date.now() });
+  setSyncDot('syncing');
+  try {
+    if(editId) {
+      const { error } = await sb.from('fiches').update({ data: fiche }).eq('id', editId);
+      if(error) throw error;
+    } else {
+      const { error } = await sb.from('fiches').insert({ data: fiche });
+      if(error) throw error;
+    }
+    setSyncDot('ok');
+    editId = null;
+    await loadFiches();
+    return true;
+  } catch(e) {
+    setSyncDot('');
+    if(editId) { const idx = fiches.findIndex(f => f._id === editId); if(idx >= 0) fiches[idx] = { ...fiche, _id: editId }; }
+    else { fiches.unshift({ ...fiche, _id: Date.now() }); }
+    localStorage.setItem('td_fiches_local', JSON.stringify(fiches));
+    editId = null;
+    showToast('⚠️ Sauvegardé en local', true);
+    return false;
   }
-  localStorage.setItem('td_fiches', JSON.stringify(fiches));
-  editId = null;
-  loadFiches();
-  return true;
 }
 
 async function deleteFicheDB(id) {
   if(!confirm('Supprimer cette fiche ?')) return;
-  fiches = fiches.filter(f => f._id !== id);
-  localStorage.setItem('td_fiches', JSON.stringify(fiches));
-  loadFiches();
-  showToast('🗑️ Fiche supprimée');
+  setSyncDot('syncing');
+  try {
+    const { error } = await sb.from('fiches').delete().eq('id', id);
+    if(error) throw error;
+    setSyncDot('ok');
+    await loadFiches();
+    showToast('🗑️ Fiche supprimée');
+  } catch(e) { setSyncDot(''); showToast('❌ Erreur suppression', true); }
 }
 
-function setupRealtime() {}
+function setupRealtime() {
+  sb.channel('fiches-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'fiches' }, () => loadFiches())
+    .subscribe();
+}
 
 function setSyncDot(state) {
   const d = document.getElementById('sync-dot');
@@ -387,25 +419,10 @@ async function handleScan(input) {
 
 function toB64(file) {
   return new Promise((res,rej) => {
-    // Redimensionner l'image avant envoi
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const max = 1024;
-      let w = img.width, h = img.height;
-      if(w > max || h > max) {
-        if(w > h) { h = Math.round(h*max/w); w = max; }
-        else { w = Math.round(w*max/h); h = max; }
-      }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      const b64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-      URL.revokeObjectURL(url);
-      res(b64);
-    };
-    img.onerror = () => rej(new Error('Lecture impossible'));
-    img.src = url;
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('Lecture impossible'));
+    r.readAsDataURL(file);
   });
 }
 
@@ -424,10 +441,7 @@ async function extractCG(b64) {
   });
   if(!resp.ok) throw new Error('Erreur API '+resp.status);
   const data = await resp.json();
-  if(!data || !data.content) throw new Error('Réponse vide du serveur');
-  const text = data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
-  if(!text) throw new Error('Aucun texte extrait');
-  return JSON.parse(text);
+  return JSON.parse(data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim());
 }
 
 function fillCG(cg) {
@@ -498,8 +512,7 @@ function renderFiches() {
       <div class="fiche-actions">
         <button class="fa-btn wa" onclick="sendWAIdx(${i})">💬 WA</button>
         <button class="fa-btn mail" onclick="sendMailIdx(${i})">📧 Mail</button>
-        <button class="fa-btn dl" onclick="dlFicheIdx(${i})">⬇️ TXT</button>
-        <button class="fa-btn dl" onclick="genPDF(${i})" style="color:#e11d48;border-color:#fecdd3;background:#fff1f2;">📄 PDF</button>
+        <button class="fa-btn dl" onclick="dlFicheIdx(${i})">⬇️ DL</button>
         <button class="fa-btn del" onclick="deleteFicheDB(${f._id})">🗑️</button>
       </div>
     </div>`).join('');
@@ -617,137 +630,6 @@ function loadCfg() {
   ANTHROPIC_KEY = cfg.apikey || '';
 }
 function clearLocal() { localStorage.removeItem('td_fiches_local'); showToast('🗑️ Cache vidé'); }
-
-function genPDF(i) {
-  const f = fiches[i];
-  const veh = [f.v_marque, f.v_modele].filter(Boolean).join(' ');
-  const num = 'F_' + String(i+1).padStart(6,'0') + '/' + new Date().getFullYear();
-  const dateEch = f.date ? new Date(new Date(f.date).getTime() + 30*24*60*60*1000).toLocaleDateString('fr-FR') : '';
-
-  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 11px; }
-  body { padding: 20px; color: #111; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-  .logo-box { font-size: 28px; font-weight: 900; color: #c00; font-style: italic; }
-  .logo-box span { color: #000; }
-  .client-box { border: 1px solid #999; padding: 10px; min-width: 250px; font-size: 12px; }
-  .tagline { text-align: right; font-weight: bold; font-size: 11px; margin-bottom: 6px; }
-  .facture-title { font-size: 18px; font-weight: bold; margin: 14px 0 6px; }
-  .meta { font-size: 11px; margin-bottom: 3px; }
-  .meta b { font-weight: bold; }
-  .commande { text-align: right; font-size: 11px; margin-bottom: 14px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-  th { background: #eee; border: 1px solid #bbb; padding: 5px 8px; text-align: center; font-weight: bold; }
-  td { border: 1px solid #bbb; padding: 5px 8px; }
-  .section-table td { vertical-align: top; min-height: 40px; }
-  .desig-table td.num { text-align: center; width: 50px; }
-  .desig-table td.price { text-align: right; width: 100px; }
-  .totals { float: right; width: 280px; margin-top: 10px; }
-  .totals table td { padding: 4px 8px; }
-  .totals table td:last-child { text-align: right; font-weight: bold; }
-  .montant { font-size: 14px; font-weight: bold; border: 2px solid #bbb; }
-  .footer-bank { margin-top: 30px; font-size: 10px; }
-  .footer-bottom { text-align: center; margin-top: 20px; font-size: 9px; color: #555; border-top: 1px solid #ccc; padding-top: 8px; }
-  .clearfix::after { content:''; display:table; clear:both; }
-</style>
-</head><body>
-<div class="header">
-  <div>
-    <div class="logo-box">toto<span>depan</span></div>
-    <div style="font-size:9px;color:#555;margin-top:4px;">DÉPANNAGE & REMORQUAGE AUTO</div>
-  </div>
-  <div>
-    <div class="tagline">Dépannage &amp; Remorquage 24h/24 — 7j/7</div>
-    <div class="client-box">
-      <strong>${f.c_nom||''} ${f.c_prenom||''}</strong><br>
-      ${f.adr_inter||''}
-    </div>
-  </div>
-</div>
-
-<div class="facture-title">Facture N° : ${num}</div>
-<div class="meta">Date Facture : <b>${f.date ? new Date(f.date).toLocaleDateString('fr-FR') : ''}</b></div>
-<div class="meta">N° Prestataire : <b>${f.c_tel||''}</b></div>
-<div class="meta">V/Réf. Commande : <b>${f.v_immat||''}</b></div>
-<div class="commande">Commande N° : C_${String(i+1).padStart(6,'0')}/${new Date().getFullYear()}</div>
-
-<table class="section-table">
-  <tr>
-    <th>MOTIF</th><th>DATE D'INTERVENTION</th><th>COMMENTAIRES</th>
-  </tr>
-  <tr>
-    <td>${f.motif||''}</td>
-    <td style="text-align:center">${f.date ? new Date(f.date).toLocaleDateString('fr-FR') : ''}</td>
-    <td>${f.commentaire||''}</td>
-  </tr>
-</table>
-
-<table class="section-table">
-  <tr><th>LIEU D'INTERVENTION</th><th>LIEU DE DÉPÔT</th></tr>
-  <tr><td style="min-height:50px;padding:10px">${f.adr_inter||''}</td><td style="padding:10px">${f.adr_depot||''}</td></tr>
-</table>
-
-<table>
-  <tr>
-    <th>IMMATRICULATION</th><th>MARQUE &amp; TYPE</th><th>N° SÉRIE (VIN)</th><th>M.E.C</th><th>SOCIÉTAIRE</th>
-  </tr>
-  <tr>
-    <td><b>${f.v_immat||''}</b></td>
-    <td>${veh}</td>
-    <td>${f.v_vin||''}</td>
-    <td>${f.v_annee||''}</td>
-    <td>${f.c_nom||''} ${f.c_prenom||''}</td>
-  </tr>
-</table>
-
-<table class="desig-table">
-  <tr><th style="text-align:left">Désignation</th><th>Qté</th><th>Prix Unit. HT</th><th>Prix Total HT</th></tr>
-  <tr>
-    <td>${f.travaux||f.motif||''}</td>
-    <td class="num">1</td>
-    <td class="price">${fmt(f.prix_ht||0)}</td>
-    <td class="price">${fmt(f.prix_ht||0)}</td>
-  </tr>
-  <tr><td colspan="4" style="height:40px"></td></tr>
-  <tr><td colspan="4" style="height:40px"></td></tr>
-</table>
-
-<div class="clearfix">
-  <div style="float:left;font-size:11px;margin-top:10px;">
-    <div>Date échéance : <b>${dateEch}</b></div>
-    <div>Conditions : <b>30 jours</b></div>
-    <div>Mode Paiement : <b>Virement bancaire</b></div>
-  </div>
-  <div class="totals">
-    <table>
-      <tr><td>Total HT :</td><td>${fmt(f.prix_ht||0)}</td></tr>
-      <tr><td>TVA ${f.tva||20}% :</td><td>${fmt((f.prix_ht||0)*(f.tva||20)/100)}</td></tr>
-      <tr><td>Total TTC :</td><td>${fmt(f.prix_ttc||0)}</td></tr>
-      <tr><td class="montant">MONTANT À PAYER :</td><td class="montant">${fmt(f.prix_ttc||0)}</td></tr>
-    </table>
-  </div>
-</div>
-
-<div class="footer-bank" style="clear:both;margin-top:30px;">
-  <b>COORDONNÉES BANCAIRES</b><br>
-  IBAN : FR76 1695 8000 0127 8405 6227 661<br>
-  BIC/SWIFT : QNTOFRP1XXX<br>
-  <i>Titulaire : TOTO DEPAN</i><br>
-  <i>Aucun escompte pour paiement anticipé ne sera accordé</i>
-</div>
-
-<div class="footer-bottom">
-  TOTO DEPAN – 91 Rue des Courlis, 95100 Argenteuil – Tél : 06 18 18 82 32 – totodpn@gmail.com – www.depanmoivite.fr<br>
-  SIRET 103 334 611 00011 – APE 5221Z – N° TVA : FR78.103334611 – RCS Pontoise 103 334 611
-</div>
-</body></html>`;
-
-  const w = window.open('', '_blank');
-  w.document.write(html);
-  w.document.close();
-  setTimeout(() => w.print(), 800);
-}
 
 function showToast(msg, err=false) {
   const t=document.getElementById('toast');
