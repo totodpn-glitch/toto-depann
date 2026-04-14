@@ -441,7 +441,10 @@ async function extractCG(b64) {
   });
   if(!resp.ok) throw new Error('Erreur API '+resp.status);
   const data = await resp.json();
-  return JSON.parse(data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim());
+  if(!data || !data.content) throw new Error('Réponse vide du serveur');
+  const text = data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
+  if(!text) throw new Error('Aucun texte extrait');
+  return JSON.parse(text);
 }
 
 function fillCG(cg) {
